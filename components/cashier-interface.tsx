@@ -98,7 +98,9 @@ export function CashierInterface() {
     }
 
     addLog(`Intentando conectar a sesión: ${sessionId}`, "info");
-    socketRef.current = io("http://localhost:3000", {
+
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000";
+    socketRef.current = io(socketUrl, {
       transports: ["websocket", "polling"],
       forceNew: true,
     });
