@@ -1,0 +1,28 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/traductor_tiempo_real/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum Speaker {
+  cliente
+  cajero
+}
+
+model Conversation {
+  id                  String   @id @default(cuid())
+  sessionId           String
+  speaker             Speaker
+  originalText        String
+  originalLanguage    String
+  translatedText      String
+  translatedLanguage  String
+  timestamp          DateTime @default(now())
+  
+  @@index([sessionId])
+}
