@@ -140,10 +140,47 @@ export function ClientInterface() {
 
   const playAudio = (audioBase64: string) => {
     try {
+      if (!audioBase64 || audioBase64.length === 0) {
+        addLog('⚠️ Audio vacío recibido', 'warning');
+        return;
+      }
+
       const audio = new Audio(`data:audio/wav;base64,${audioBase64}`);
-      audio.play().catch(console.error);
+      const audioSize = (audioBase64.length * 0.75 / 1024).toFixed(2); // Approximate KB
+      
+      addLog(`📥 Cargando audio (${audioSize} KB)`, 'info');
+      
+      audio.addEventListener('loadeddata', () => {
+        const duration = audio.duration.toFixed(1);
+        addLog(`✓ Audio cargado (${duration}s)`, 'success');
+      });
+      
+      audio.addEventListener('play', () => {
+        addLog('▶️ Reproduciendo audio...', 'info');
+      });
+      
+      audio.addEventListener('ended', () => {
+        addLog('✓ Reproducción completada', 'success');
+      });
+      
+      audio.addEventListener('error', (e) => {
+        addLog(`✗ Error al reproducir audio: ${e.type}`, 'error');
+      });
+      
+      audio.play().catch((error) => {
+        console.error('Error playing audio:', error);
+        addLog(`✗ Error al iniciar reproducción: ${error.message}`, 'error');
+        if (error.name === 'NotAllowedError') {
+          toast({
+            title: 'Audio bloqueado',
+            description: 'Haz clic en la página para permitir el audio',
+            variant: 'destructive',
+          });
+        }
+      });
     } catch (error) {
       console.error("Error playing audio:", error);
+      addLog(`✗ Error al reproducir audio: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
     }
   };
 
@@ -239,6 +276,12 @@ export function ClientInterface() {
         `✓ Texto traducido: "${result.translatedText.substring(0, 30)}..."`,
         "success"
       );
+
+      // Play audio locally (user hears their own translation)
+      if (result.audioBase64) {
+        addLog('🔊 Reproduciendo tu traducción...', 'info');
+        playAudio(result.audioBase64);
+      }
 
       // Add message to local state
       setMessages((prev) => [
