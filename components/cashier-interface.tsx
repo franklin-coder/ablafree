@@ -133,12 +133,32 @@ export function CashierInterface() {
     });
 
     socketRef.current.on("message-received", (data: SocketMessage) => {
-      addLog(
-        `📩 Mensaje recibido de ${
-          data.speaker === "cliente" ? "Cliente" : "Empleado"
-        }`,
-        "success"
-      );
+      const speakerName = data.speaker === "cliente" ? "Cliente" : "Empleado";
+      addLog(`📩 Mensaje recibido de ${speakerName}`, "success");
+      
+      // Log audio data details
+      if (data.audioBase64) {
+        const audioSize = (data.audioBase64.length * 0.75 / 1024).toFixed(2);
+        addLog(`📦 Audio recibido: ${audioSize} KB`, "info");
+        addLog(`🔊 Reproduciendo audio del ${speakerName}...`, "info");
+        
+        // Show visible toast for debugging
+        toast({
+          title: `🔊 Audio del ${speakerName}`,
+          description: `Reproduciendo mensaje traducido (${audioSize} KB)`,
+          duration: 3000,
+        });
+        
+        playAudio(data.audioBase64);
+      } else {
+        addLog(`⚠️ Mensaje recibido SIN audio`, "warning");
+        toast({
+          title: "⚠️ Sin audio",
+          description: "Mensaje recibido pero no contiene audio",
+          variant: "destructive",
+        });
+      }
+      
       setMessages((prev) => [
         ...prev,
         {
@@ -148,12 +168,6 @@ export function CashierInterface() {
           timestamp: new Date(data.timestamp),
         },
       ]);
-
-      // Play audio if available
-      if (data.audioBase64) {
-        addLog("🔊 Reproduciendo audio traducido", "info");
-        playAudio(data.audioBase64);
-      }
     });
   };
 
@@ -311,7 +325,11 @@ export function CashierInterface() {
       ]);
 
       // Emit to other participants via Socket.io
-      addLog("📡 Enviando mensaje a otros participantes...", "info");
+      const audioSizeKB = result.audioBase64 
+        ? (result.audioBase64.length * 0.75 / 1024).toFixed(2) 
+        : '0';
+      addLog(`📡 Enviando mensaje a otros participantes (Audio: ${audioSizeKB} KB)...`, "info");
+      
       socketRef.current?.emit("send-message", {
         sessionId: sessionId,
         originalText: result.originalText,
@@ -320,7 +338,8 @@ export function CashierInterface() {
         audioBase64: result.audioBase64,
         timestamp: new Date(),
       });
-      addLog("✓ Mensaje enviado exitosamente", "success");
+      
+      addLog(`✓ Mensaje enviado a sesión: ${sessionId}`, "success");
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Error al procesar el audio";

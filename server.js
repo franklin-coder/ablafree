@@ -1,3 +1,4 @@
+
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
@@ -28,16 +29,15 @@ app.prepare().then(() => {
     }
   })
 
-  // Store active sessions with language info
+  // Store active sessions
   const activeSessions = new Map()
-  const sessionLanguages = new Map() // Store language for each socket
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id)
 
     socket.on('join-session', (sessionId) => {
       console.log(`Client ${socket.id} joining session: ${sessionId}`)
-
+      
       // Leave any previous rooms
       socket.rooms.forEach(room => {
         if (room !== socket.id) {
@@ -47,22 +47,12 @@ app.prepare().then(() => {
 
       // Join the new session room
       socket.join(sessionId)
-
+      
       // Track active sessions
       if (!activeSessions.has(sessionId)) {
         activeSessions.set(sessionId, new Set())
       }
       activeSessions.get(sessionId).add(socket.id)
-
-      // Send existing participants' languages to the new joiner
-      activeSessions.get(sessionId).forEach(participantId => {
-        if (participantId !== socket.id && sessionLanguages.has(participantId)) {
-          socket.emit('language-update', {
-            language: sessionLanguages.get(participantId),
-            sessionId: sessionId
-          })
-        }
-      })
 
       // Notify others in the session
       socket.to(sessionId).emit('user-joined', {
@@ -75,8 +65,18 @@ app.prepare().then(() => {
     })
 
     socket.on('send-message', (data) => {
-      console.log('Broadcasting message in session:', data.sessionId)
-
+      const audioSizeKB = data.audioBase64 
+        ? (data.audioBase64.length * 0.75 / 1024).toFixed(2) 
+        : '0';
+      
+      console.log(`📤 Message from ${data.speaker} in session ${data.sessionId} (Audio: ${audioSizeKB} KB)`)
+      
+      // Count recipients
+      const roomSize = io.sockets.adapter.rooms.get(data.sessionId)?.size || 0
+      const recipientCount = roomSize - 1 // Exclude sender
+      
+      console.log(`   └─> Broadcasting to ${recipientCount} recipient(s)`)
+      
       // Broadcast to all other clients in the same session
       socket.to(data.sessionId).emit('message-received', {
         originalText: data.originalText,
@@ -86,30 +86,25 @@ app.prepare().then(() => {
         timestamp: data.timestamp,
         sessionId: data.sessionId
       })
+      
+      console.log(`   ✓ Broadcast complete`)
     })
 
     // Handle language updates
     socket.on('language-update', (data) => {
-      console.log(`Language update in session ${data.sessionId}: ${data.language}`)
-
-      // Store the language for this socket
-      sessionLanguages.set(socket.id, data.language)
-
-      // Broadcast language change to OTHER clients in the session (not sender)
-      socket.to(data.sessionId).emit('language-update', {
+      console.log(`Language update in session ${data.sessionId}: ${data.speaker} -> ${data.language}`)
+      
+      // Broadcast language change to all clients in the session (including sender)
+      io.to(data.sessionId).emit('language-changed', {
         language: data.language,
+        speaker: data.speaker,
         sessionId: data.sessionId
       })
     })
 
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id)
-
-      // Remove language info for this socket
-      if (sessionLanguages.has(socket.id)) {
-        sessionLanguages.delete(socket.id)
-      }
-
+      
       // Remove from all active sessions
       activeSessions.forEach((participants, sessionId) => {
         if (participants.has(socket.id)) {
